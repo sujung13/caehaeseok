@@ -15,7 +15,7 @@ let state = null;
 
 function freshState() {
   return {
-    ctx: { nickname: '', prevType: '', reason: '' },
+    ctx: { nickname: '', field: '', prevType: '', reason: '' },
     messages: [],      // [{role, content}]
     turn: 1,           // 화면에 떠 있는 질문의 턴
     pendingTurn: 1,    // 요청 중인 턴 (재시도용)
@@ -514,6 +514,7 @@ async function startInterview() {
 
   state.ctx = {
     nickname: $('#in-nickname').value.trim(),
+    field: $('#in-field').value.trim(),
     prevType: $('#in-prevtype').value.trim(),
     reason: $('#in-reason').value.trim(),
   };
