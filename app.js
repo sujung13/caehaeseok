@@ -2,7 +2,8 @@
    나를 위한 캐해석 - app.js
    ───────────────────────────────────────── */
 
-const MAX_TURNS = 8;
+const MAX_TURNS = 5;   // Phase 2 서술형 턴 수
+const QUIZ_COUNT = 10; // Phase 1 객관식 문항 수 (questions.js 기준)
 const DAILY_LIMIT = 2;
 const KEY_USAGE = 'hue:usage';
 const KEY_SESSION = 'hue:session';
@@ -16,6 +17,8 @@ let state = null;
 function freshState() {
   return {
     ctx: { nickname: '', field: '', prevType: '', reason: '' },
+    quiz: [],          // Phase 1 답변 [{id, text, answer}]
+    quizIndex: 0,
     messages: [],      // [{role, content}]
     turn: 1,           // 화면에 떠 있는 질문의 턴
     pendingTurn: 1,    // 요청 중인 턴 (재시도용)
@@ -40,10 +43,13 @@ function loadSession() {
     // 하루 지난 세션은 버린다
     if (Date.now() - (s.savedAt || 0) > 864e5) return null;
     if (s.done) return null;
-    if (!s.messages || s.messages.length === 0) return null;
     // 빈 메시지가 하나라도 섞이면 이후 호출이 전부 실패한다
-    s.messages = s.messages.filter((m) => m && typeof m.content === 'string' && m.content.trim());
-    if (s.messages.length === 0) return null;
+    s.messages = (s.messages || []).filter(
+      (m) => m && typeof m.content === 'string' && m.content.trim()
+    );
+    s.quiz = (s.quiz || []).filter(Boolean);
+    // 객관식을 하나라도 골랐거나 인터뷰가 시작됐으면 복구 대상
+    if (s.quiz.length === 0 && s.messages.length === 0) return null;
     return s;
   } catch (_) { return null; }
 }
@@ -98,9 +104,8 @@ function paint() {
   const shown = Math.min(state.turn, MAX_TURNS);
   $('#progress-fill').style.width = (shown / MAX_TURNS) * 100 + '%';
   $('#progress-label').textContent = `${shown} / ${MAX_TURNS}`;
-  // 답한 개수에 비례해 색이 차오른다
-  const fill = 0.18 + 0.82 * (state.answered / MAX_TURNS);
-  $('#hue-avatar').style.setProperty('--fill', fill.toFixed(2));
+  // Phase 1과 2를 합쳐 색이 차오른다
+  $('#hue-avatar').style.setProperty('--fill', fillValue().toFixed(2));
 }
 
 // ── 인터뷰 ─────────────────────────────
@@ -502,6 +507,83 @@ async function saveCard() {
   }
 }
 
+// ── Phase 1 객관식 ─────────────────────
+
+/** Phase 1 + Phase 2 진행분을 합친 채움 정도 */
+function fillValue() {
+  const total = QUIZ_COUNT + MAX_TURNS;
+  const done = state.quiz.length + state.answered;
+  return 0.16 + 0.84 * (done / total);
+}
+
+function renderQuiz() {
+  const i = state.quizIndex;
+  const q = QUIZ[i];
+  if (!q) return startPhase2();
+
+  $('#quiz-label').textContent = `${i + 1} / ${QUIZ.length}`;
+  $('#quiz-fill').style.width = ((i + 1) / QUIZ.length) * 100 + '%';
+  $('#quiz-avatar').style.setProperty('--fill', fillValue().toFixed(2));
+  $('#quiz-question').textContent = q.text;
+  $('#quiz-back').style.visibility = i === 0 ? 'hidden' : 'visible';
+
+  const picked = state.quiz[i] ? state.quiz[i].answer : null;
+  const box = $('#quiz-choices');
+  box.innerHTML = '';
+
+  q.options.forEach((opt) => {
+    const b = document.createElement('button');
+    b.className = 'choice' + (opt === picked ? ' is-picked' : '');
+    b.textContent = opt;
+    b.addEventListener('click', () => pickAnswer(opt));
+    box.appendChild(b);
+  });
+
+  const own = document.createElement('button');
+  own.className = 'choice own-trigger';
+  own.textContent = '내 답은 여기 없어요';
+  own.addEventListener('click', () => {
+    $('#quiz-own').classList.remove('hidden');
+    own.classList.add('hidden');
+    $('#quiz-own-input').focus();
+  });
+  box.appendChild(own);
+
+  $('#quiz-own').classList.add('hidden');
+  $('#quiz-own-input').value = '';
+}
+
+function pickAnswer(answer) {
+  const q = QUIZ[state.quizIndex];
+  state.quiz[state.quizIndex] = { id: q.id, text: q.text, answer };
+  save();
+  // 고른 표시를 잠깐 보여준 뒤 넘어간다
+  const el = [...$('#quiz-choices').children].find((c) => c.textContent === answer);
+  if (el) el.classList.add('is-picked');
+  setTimeout(() => {
+    state.quizIndex++;
+    renderQuiz();
+  }, 220);
+}
+
+/** Phase 1 답변을 Phase 2와 결과 생성에 넘길 한 덩어리로 만든다 */
+function quizBlock() {
+  const lines = state.quiz
+    .filter(Boolean)
+    .map((a, i) => `${i + 1}. ${a.text}\n   → ${a.answer}`);
+  return `[사전 객관식 응답]\n${lines.join('\n')}`;
+}
+
+async function startPhase2() {
+  state.messages = [{ role: 'user', content: quizBlock() }];
+  state.turn = 1;
+  state.answered = 0;
+  save();
+  go('interview');
+  paint();
+  await askTurn(1);
+}
+
 // ── 시작 ───────────────────────────────
 async function startInterview() {
   const usage = getUsage();
@@ -519,14 +601,16 @@ async function startInterview() {
     reason: $('#in-reason').value.trim(),
   };
   bumpUsage();
-  go('interview');
-  paint();
-  await askTurn(1);
+  state.quiz = [];
+  state.quizIndex = 0;
+  go('quiz');
+  renderQuiz();
 }
 
 function resetAll() {
   state = freshState();
   pending = {};
+  $('#quiz-own').classList.add('hidden');
   localStorage.removeItem(KEY_SESSION);
   ['#result-2', '#result-3', '#result-actions'].forEach((s) => $(s).classList.add('hidden'));
   $('#btn-more').classList.remove('hidden');
@@ -543,6 +627,19 @@ document.addEventListener('click', (e) => {
 });
 
 $('#btn-start').addEventListener('click', startInterview);
+
+$('#quiz-back').addEventListener('click', () => {
+  if (state.quizIndex > 0) { state.quizIndex--; renderQuiz(); }
+});
+function sendOwn() {
+  const v = $('#quiz-own-input').value.trim();
+  if (!v) return;
+  pickAnswer(v);
+}
+$('#quiz-own-send').addEventListener('click', sendOwn);
+$('#quiz-own-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendOwn();
+});
 $('#btn-send').addEventListener('click', sendAnswer);
 $('#btn-retry').addEventListener('click', () => {
   // 마지막으로 요청하려던 턴을 그대로 다시 시도한다
@@ -569,7 +666,7 @@ $('#answer').addEventListener('input', (e) => {
 
 // 인터뷰 중 이탈 방지
 window.addEventListener('beforeunload', (e) => {
-  if (state && state.messages.length > 0 && !state.done) {
+  if (state && !state.done && (state.quiz.length > 0 || state.messages.length > 0)) {
     e.preventDefault();
     e.returnValue = '';
   }
@@ -582,6 +679,11 @@ if (prev) {
   $('#btn-resume').classList.remove('hidden');
   $('#btn-resume').addEventListener('click', () => {
     state = prev;
+    if (state.quizIndex < QUIZ.length) {
+      go('quiz');
+      renderQuiz();
+      return;
+    }
     go('interview');
     paint();
     const last = [...state.messages].reverse().find((m) => m.role === 'assistant');

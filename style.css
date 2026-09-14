@@ -202,6 +202,70 @@ input:focus, textarea:focus {
 }
 ::placeholder { color: var(--ink-faint); }
 
+/* ── Phase 1 객관식 ───────────────────── */
+
+.screen-quiz.is-active {
+  justify-content: flex-start;
+  gap: 20px;
+  padding-top: 22px;
+}
+
+.quiz-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.quiz-q {
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.55;
+  text-align: center;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.choices { display: grid; gap: 9px; width: 100%; }
+
+.choice {
+  font: inherit;
+  text-align: left;
+  background: rgba(255, 255, 255, .86);
+  backdrop-filter: blur(6px);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  color: var(--ink);
+  line-height: 1.5;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform .12s, border-color .18s, background .18s;
+}
+.choice:hover { border-color: var(--lav-200); }
+.choice:active { transform: scale(.985); }
+.choice.is-picked {
+  border-color: var(--lav-500);
+  background: var(--lav-50);
+}
+.choice.own-trigger {
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-faint);
+  font-size: 14.5px;
+  text-align: center;
+  padding: 12px;
+}
+
+.own { display: flex; gap: 8px; width: 100%; }
+.own input { flex: 1; }
+
+.quiz-foot { display: flex; justify-content: flex-start; }
+.quiz-foot .btn { padding-left: 0; }
+
 /* ── 인터뷰 화면 ──────────────────────── */
 
 .screen-interview.is-active {
