@@ -98,7 +98,16 @@ module.exports = async (req, res) => {
     messages.length > 0 ? messages : [{ role: 'user', content: '인터뷰를 시작해주세요.' }];
 
   // ── 호출 ────────────────────────────────────
-  try {
+  async function callClaude(extraNudge) {
+    const sys = [
+      {
+        type: 'text',
+        text: withUserContext(SYSTEM_INTERVIEW, userContext),
+        cache_control: { type: 'ephemeral' },
+      },
+      { type: 'text', text: extraNudge ? `${brief}\n\n${extraNudge}` : brief },
+    ];
+
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -107,18 +116,10 @@ module.exports = async (req, res) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
+        // 한글은 토큰 효율이 낮다. 160자 제한이라도 여유를 넉넉히 둔다.
         model: MODEL,
-        max_tokens: 400,
-        // system을 두 블록으로 나눠 앞쪽만 캐싱한다.
-        // 긴 시스템 프롬프트가 매 턴 반복되므로 입력 비용이 크게 줄어든다.
-        system: [
-          {
-            type: 'text',
-            text: withUserContext(SYSTEM_INTERVIEW, userContext),
-            cache_control: { type: 'ephemeral' },
-          },
-          { type: 'text', text: brief },
-        ],
+        max_tokens: 800,
+        system: sys,
         messages: apiMessages,
       }),
     });
@@ -126,29 +127,62 @@ module.exports = async (req, res) => {
     if (!r.ok) {
       const detail = await r.text();
       console.error('anthropic error', r.status, detail);
-      return res.status(502).json({ error: '잠시 문제가 생겼어요. 다시 시도해주세요.' });
+      throw new Error('upstream');
     }
 
     const data = await r.json();
-    let question = (data.content || [])
+    const text = (data.content || [])
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
       .join('\n')
       .trim();
 
+    return { text, stopReason: data.stop_reason, usage: data.usage };
+  }
+
+  try {
+    let { text, stopReason, usage } = await callClaude();
+
+    // 빈 응답이 나오는 경우가 드물게 있다. 그대로 두면 다음 호출에서
+    // 빈 assistant 메시지 때문에 대화 전체가 깨지므로 한 번 다시 받는다.
+    if (!text) {
+      console.warn('empty response, retrying');
+      ({ text, stopReason, usage } = await callClaude(
+        '반드시 한국어 질문 한 문장 이상을 출력해. 빈 응답은 허용되지 않아.'
+      ));
+    }
+
+    // 그래도 비어 있으면 실패로 처리한다. 프론트가 재시도 버튼을 보여준다.
+    if (!text) {
+      return res.status(502).json({ error: 'EMPTY', message: '질문을 받지 못했어요.' });
+    }
+
     // ── 위기 신호 ─────────────────────────────
-    const paused = question.startsWith('[PAUSE]');
-    if (paused) question = question.replace('[PAUSE]', '').trim();
+    const paused = text.startsWith('[PAUSE]');
+    let question = paused ? text.replace('[PAUSE]', '').trim() : text;
+
+    // 토큰 상한에 걸려 문장이 끊긴 경우, 마지막 완성 문장까지만 남긴다.
+    // 800토큰이면 거의 걸리지 않지만 안전장치로 둔다.
+    if (stopReason === 'max_tokens') {
+      const cut = Math.max(
+        question.lastIndexOf('?'),
+        question.lastIndexOf('.'),
+        question.lastIndexOf('요'),
+        question.lastIndexOf('!')
+      );
+      if (cut > 30) question = question.slice(0, cut + 1);
+      console.warn('truncated at max_tokens');
+    }
 
     return res.status(200).json({
       question,
       turn,
       advanced: !isShort,   // 되묻기면 턴 유지
       paused,
-      usage: data.usage,    // 비용 모니터링용
+      usage,                // 비용 모니터링용
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: '잠시 문제가 생겼어요. 다시 시도해주세요.' });
+    return res.status(502).json({ error: 'UPSTREAM', message: '잠시 문제가 생겼어요.' });
   }
 };
