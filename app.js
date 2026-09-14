@@ -18,6 +18,7 @@ function freshState() {
     ctx: { nickname: '', prevType: '', reason: '' },
     messages: [],      // [{role, content}]
     turn: 1,           // 화면에 떠 있는 질문의 턴
+    pendingTurn: 1,    // 요청 중인 턴 (재시도용)
     retryUsed: false,  // 이번 턴에서 이미 되물었는지
     answered: 0,       // 실제로 답한 개수 (진행률용)
     results: [null, null, null],
@@ -40,6 +41,9 @@ function loadSession() {
     if (Date.now() - (s.savedAt || 0) > 864e5) return null;
     if (s.done) return null;
     if (!s.messages || s.messages.length === 0) return null;
+    // 빈 메시지가 하나라도 섞이면 이후 호출이 전부 실패한다
+    s.messages = s.messages.filter((m) => m && typeof m.content === 'string' && m.content.trim());
+    if (s.messages.length === 0) return null;
     return s;
   } catch (_) { return null; }
 }
@@ -118,9 +122,19 @@ function showQuestion(text) {
   b.classList.add('is-new');
 }
 
+/** 질문을 받지 못했을 때. 대화 기록은 건드리지 않고 재시도 버튼만 띄운다. */
+function questionFailed(msg) {
+  $('#question').textContent = msg;
+  $('#btn-retry').classList.remove('hidden');
+  setComposer(false);
+}
+
 async function askTurn(turnToAsk) {
   showTyping();
   setComposer(false);
+  $('#btn-retry').classList.add('hidden');
+  state.pendingTurn = turnToAsk; // 재시도용
+
   try {
     const r = await api('/api/interview', {
       messages: state.messages,
@@ -136,7 +150,15 @@ async function askTurn(turnToAsk) {
       return;
     }
 
-    state.messages.push({ role: 'assistant', content: r.question });
+    // 빈 질문은 절대 대화 기록에 넣지 않는다.
+    // 빈 assistant 메시지가 들어가면 이후 호출이 전부 실패한다.
+    const q = (r.question || '').trim();
+    if (!q) {
+      questionFailed('질문을 받지 못했어요. 아래 버튼을 눌러주세요.');
+      return;
+    }
+
+    state.messages.push({ role: 'assistant', content: q });
 
     if (r.advanced) {
       state.turn = Math.min(turnToAsk, MAX_TURNS);
@@ -145,7 +167,7 @@ async function askTurn(turnToAsk) {
       state.retryUsed = true; // 되묻는 중이라 턴은 그대로
     }
 
-    showQuestion(r.question);
+    showQuestion(q);
     paint();
     setComposer(true);
     save();
@@ -156,21 +178,13 @@ async function askTurn(turnToAsk) {
       go('limit');
       return;
     }
-    $('#question').textContent = '잠시 문제가 생겼어요. 아래 버튼을 다시 눌러주세요.';
-    $('#btn-send').disabled = false;
-    $('#btn-send').textContent = '다시 시도';
+    questionFailed('잠시 문제가 생겼어요. 아래 버튼을 눌러주세요.');
   }
 }
 
 async function sendAnswer() {
   const text = $('#answer').value.trim();
   if (!text) return;
-
-  // 오류 복구용 재시도
-  if ($('#btn-send').textContent === '다시 시도') {
-    $('#btn-send').textContent = '보내기';
-    return askTurn(state.turn);
-  }
 
   state.messages.push({ role: 'user', content: text });
   state.answered = Math.max(state.answered, state.turn);
@@ -529,6 +543,10 @@ document.addEventListener('click', (e) => {
 
 $('#btn-start').addEventListener('click', startInterview);
 $('#btn-send').addEventListener('click', sendAnswer);
+$('#btn-retry').addEventListener('click', () => {
+  // 마지막으로 요청하려던 턴을 그대로 다시 시도한다
+  askTurn(state.pendingTurn || state.turn);
+});
 $('#btn-more').addEventListener('click', (e) => showMore(Number(e.currentTarget.dataset.stage)));
 $('#btn-card').addEventListener('click', saveCard);
 $('#btn-restart').addEventListener('click', resetAll);
