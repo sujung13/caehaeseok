@@ -27,7 +27,10 @@ const {
 const MODEL = 'claude-opus-5';
 
 const STAGE_PROMPT = { 1: RESULT_1, 2: RESULT_2, 3: RESULT_3 };
-const MAX_TOKENS = { 1: 2000, 2: 3000, 3: 3000 };
+// 한글은 토큰 효율이 낮다. 3차는 표까지 들어가므로 넉넉히 잡는다.
+const MAX_TOKENS = { 1: 4000, 2: 8000, 3: 8000 };
+// 그래도 끊기면 이어받는다. 최대 이 횟수까지.
+const MAX_CONTINUATIONS = 2;
 
 const MAX_MESSAGES = 30;
 const MAX_CHARS_PER_MESSAGE = 2000;
@@ -65,7 +68,7 @@ module.exports = async (req, res) => {
   });
   apiMessages.push({ role: 'user', content: STAGE_PROMPT[stage] });
 
-  try {
+  async function callClaude(msgs) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -83,26 +86,61 @@ module.exports = async (req, res) => {
             cache_control: { type: 'ephemeral' },
           },
         ],
-        messages: apiMessages,
+        messages: msgs,
       }),
     });
 
     if (!r.ok) {
       const detail = await r.text();
       console.error('anthropic error', r.status, detail);
-      return res.status(502).json({ error: '결과를 만들다 문제가 생겼어요. 다시 시도해주세요.' });
+      throw new Error('upstream');
     }
 
     const data = await r.json();
-    const markdown = (data.content || [])
+    const text = (data.content || [])
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
-      .join('\n')
-      .trim();
+      .join('\n');
 
-    return res.status(200).json({ markdown, stage, usage: data.usage });
+    return { text, stopReason: data.stop_reason, usage: data.usage };
+  }
+
+  try {
+    let { text, stopReason, usage } = await callClaude(apiMessages);
+    let markdown = text;
+    let inputTokens = usage?.input_tokens || 0;
+    let outputTokens = usage?.output_tokens || 0;
+
+    // 토큰 상한에서 끊겼으면 이어서 받는다.
+    // 마지막 메시지를 assistant로 두면 모델이 그 지점부터 이어 쓴다.
+    let n = 0;
+    while (stopReason === 'max_tokens' && n < MAX_CONTINUATIONS) {
+      n++;
+      console.warn(`stage ${stage} truncated, continuing (${n})`);
+      const cont = await callClaude([
+        ...apiMessages,
+        // 끝의 공백이 남아 있으면 API가 거부한다
+        { role: 'assistant', content: markdown.trimEnd() },
+      ]);
+      markdown += cont.text;
+      stopReason = cont.stopReason;
+      inputTokens += cont.usage?.input_tokens || 0;
+      outputTokens += cont.usage?.output_tokens || 0;
+    }
+
+    markdown = markdown.trim();
+    if (!markdown) {
+      return res.status(502).json({ error: 'EMPTY', message: '결과를 받지 못했어요.' });
+    }
+
+    return res.status(200).json({
+      markdown,
+      stage,
+      truncated: stopReason === 'max_tokens',
+      usage: { input_tokens: inputTokens, output_tokens: outputTokens, continuations: n },
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: '결과를 만들다 문제가 생겼어요. 다시 시도해주세요.' });
+    return res.status(502).json({ error: 'UPSTREAM', message: '결과를 만들다 문제가 생겼어요.' });
   }
 };
