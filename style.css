@@ -1,0 +1,354 @@
+/* ─────────────────────────────────────────
+   나를 위한 캐해석 - style.css
+   ───────────────────────────────────────── */
+
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+
+/* 이서윤체: TTF를 woff2로 변환해서 /assets에 넣어주세요.
+   변환 전에도 깨지지 않도록 fallback을 걸어두었습니다. */
+@font-face {
+  font-family: 'LeeSeoyun';
+  src: url('/assets/LeeSeoyun.woff2') format('woff2'),
+       url('/assets/LeeSeoyun.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --bg:        #FAF8FE;
+  --surface:   #FFFFFF;
+  --lav-50:    #F6F2FE;
+  --lav-100:   #EDE6FD;
+  --lav-200:   #DCCFFA;
+  --lav-400:   #B79BF5;
+  --lav-500:   #9B7BEE;
+  --lav-600:   #7F5CDB;
+  --ink:       #2E2545;
+  --ink-soft:  #6D6487;
+  --ink-faint: #9A93AD;
+
+  --radius:    20px;
+  --radius-sm: 14px;
+  --shadow:    0 8px 28px rgba(123, 92, 219, .10);
+  --shadow-sm: 0 3px 12px rgba(123, 92, 219, .08);
+
+  --max: 480px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--bg) url('/assets/bg.jpg') center / cover fixed no-repeat;
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+.warm {
+  font-family: 'LeeSeoyun', 'Pretendard Variable', Pretendard, sans-serif;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+#app {
+  max-width: var(--max);
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+}
+
+/* ── 화면 전환 ────────────────────────── */
+
+.screen {
+  display: none;
+  min-height: 100dvh;
+  padding: 32px 22px calc(32px + env(safe-area-inset-bottom));
+  position: relative;
+}
+.screen.is-active {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  animation: fade .45s ease both;
+}
+@keyframes fade {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.stack { display: flex; flex-direction: column; gap: 18px; width: 100%; }
+.stack.center { align-items: center; text-align: center; }
+.hidden { display: none !important; }
+
+/* ── 타이포 ───────────────────────────── */
+
+.title-xl { font-size: 34px; letter-spacing: -.01em; }
+.title-lg { font-size: 25px; letter-spacing: -.01em; }
+
+.lead   { font-size: 16px; color: var(--ink-soft); }
+.lead.left { text-align: left; }
+.muted  { font-size: 14px; color: var(--ink-faint); }
+
+/* ── 캐릭터 ───────────────────────────── */
+
+.hue { display: block; height: auto; }
+
+/* 인터뷰 진행에 따라 색이 차오른다. --fill은 app.js가 조절 */
+.hue-fill {
+  filter: saturate(var(--fill, .18)) brightness(calc(1.12 - var(--fill, .18) * .12));
+  transition: filter 1.1s ease;
+}
+
+.hue-float { animation: float 4.5s ease-in-out infinite; }
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+
+.hue-pulse { animation: pulse 2.2s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.06); opacity: .88; }
+}
+
+.hue-glow {
+  align-self: center;
+  filter: drop-shadow(0 0 24px rgba(155, 123, 238, .35));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hue-float, .hue-pulse { animation: none; }
+  .screen.is-active { animation: none; }
+}
+
+/* ── 장식 ─────────────────────────────── */
+
+.deco { position: absolute; opacity: .5; pointer-events: none; height: auto; }
+.deco-1 { width: 34px; top: 12%;  left: 10%;  animation: float 6s ease-in-out infinite; }
+.deco-2 { width: 28px; top: 22%;  right: 12%; animation: float 5s ease-in-out .8s infinite; }
+.deco-3 { width: 46px; bottom: 14%; right: 8%; animation: float 7s ease-in-out .4s infinite; }
+
+/* ── 버튼 ─────────────────────────────── */
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  border: 0;
+  border-radius: 999px;
+  padding: 15px 28px;
+  cursor: pointer;
+  transition: transform .12s, box-shadow .2s, opacity .2s;
+  width: 100%;
+}
+.btn:active { transform: scale(.975); }
+.btn:disabled { opacity: .45; cursor: default; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--lav-400), var(--lav-600));
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-soft);
+  box-shadow: none;
+  font-weight: 500;
+}
+.btn-sm { width: auto; padding: 11px 22px; font-size: 15px; }
+
+/* ── 안내 목록 ────────────────────────── */
+
+.notes {
+  background: rgba(255, 255, 255, .72);
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius);
+  padding: 18px 20px 18px 36px;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 9px;
+}
+.notes b { color: var(--ink); font-weight: 600; }
+.notes.soft { padding-left: 20px; list-style: none; text-align: left; }
+
+/* ── 입력 필드 ────────────────────────── */
+
+.field { display: grid; gap: 7px; }
+.field > span { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.field em { font-style: normal; font-weight: 400; color: var(--ink-faint); }
+
+input, textarea {
+  font: inherit;
+  width: 100%;
+  border: 1.5px solid var(--lav-100);
+  background: rgba(255, 255, 255, .85);
+  border-radius: var(--radius-sm);
+  padding: 13px 15px;
+  color: var(--ink);
+  resize: none;
+  transition: border-color .18s, box-shadow .18s;
+}
+input:focus, textarea:focus {
+  outline: 0;
+  border-color: var(--lav-400);
+  box-shadow: 0 0 0 4px rgba(155, 123, 238, .12);
+}
+::placeholder { color: var(--ink-faint); }
+
+/* ── 인터뷰 화면 ──────────────────────── */
+
+.screen-interview.is-active {
+  justify-content: flex-start;
+  gap: 20px;
+  padding-top: 22px;
+}
+
+.bar { display: flex; align-items: center; gap: 12px; }
+.progress {
+  flex: 1;
+  height: 6px;
+  background: var(--lav-100);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  width: 12%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--lav-200), var(--lav-500));
+  transition: width .6s cubic-bezier(.4, 0, .2, 1);
+}
+.progress-label { font-size: 13px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+
+.interview-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.bubble {
+  background: rgba(255, 255, 255, .88);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  font-size: 16.5px;
+  line-height: 1.72;
+  box-shadow: var(--shadow);
+  width: 100%;
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+}
+.bubble.is-new { animation: fade .5s ease both; }
+
+.typing { display: flex; gap: 5px; margin: 0 auto; }
+.typing i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--lav-200);
+  animation: blink 1.3s infinite;
+}
+.typing i:nth-child(2) { animation-delay: .18s; }
+.typing i:nth-child(3) { animation-delay: .36s; }
+@keyframes blink { 0%, 60%, 100% { opacity: .3; } 30% { opacity: 1; } }
+
+.composer { display: grid; gap: 10px; }
+.composer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hint { font-size: 12.5px; color: var(--ink-faint); flex: 1; }
+
+/* ── 결과 ─────────────────────────────── */
+
+.screen-result.is-active { justify-content: flex-start; padding-top: 28px; }
+
+.md {
+  background: rgba(255, 255, 255, .86);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+  padding: 24px 22px;
+  box-shadow: var(--shadow-sm);
+  font-size: 15.5px;
+  color: var(--ink-soft);
+}
+.md h2 {
+  font-family: 'LeeSeoyun', Pretendard, sans-serif;
+  font-weight: 400;
+  font-size: 24px;
+  color: var(--ink);
+  margin: 26px 0 10px;
+  line-height: 1.4;
+}
+.md h2:first-child { margin-top: 0; }
+.md h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 18px 0 7px;
+}
+.md p { margin: 9px 0; }
+.md ul, .md ol { margin: 9px 0 9px 18px; }
+.md li { margin: 5px 0; }
+.md strong { color: var(--ink); font-weight: 600; }
+.md blockquote {
+  border-left: 3px solid var(--lav-200);
+  padding-left: 14px;
+  margin: 12px 0;
+  color: var(--ink-faint);
+}
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.md th, .md td {
+  border-bottom: 1px solid var(--lav-100);
+  padding: 9px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+.md th { color: var(--ink); font-weight: 600; white-space: nowrap; }
+
+/* 유형명은 크게 */
+.md .typename {
+  font-family: 'LeeSeoyun', Pretendard, sans-serif;
+  font-size: 30px;
+  color: var(--lav-600);
+  text-align: center;
+  margin: 4px 0 2px;
+  line-height: 1.35;
+}
+.md .typename-en {
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+  margin-bottom: 18px;
+}
+
+.result-actions { display: grid; gap: 8px; margin-top: 6px; }
+
+/* ── 토스트 ───────────────────────────── */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  background: rgba(46, 37, 69, .92);
+  color: #fff;
+  font-size: 14px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  z-index: 50;
+  animation: fade .3s ease both;
+}
